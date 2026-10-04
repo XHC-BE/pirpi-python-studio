@@ -35,45 +35,76 @@ function usePersistentState(key, initial) {
   return [value, setValue];
 }
 
-/** Séparateur glissable. `axis` : 'x' (colonne) ou 'y' (ligne). */
-function Splitter({ axis, onDrag }) {
+/** Nombre persisté dans localStorage (taille d'un panneau). */
+function usePersistentNumber(key, initial) {
+  const [raw, setRaw] = usePersistentState(key, String(initial));
+  const number = Number(raw);
+  return [Number.isFinite(number) && number > 0 ? number : initial, (value) => setRaw(String(Math.round(value)))];
+}
+
+const KEY_STEP = 24; // pixels par appui de flèche
+
+/**
+ * Séparateur redimensionnable. `axis` : 'x' (colonne) ou 'y' (ligne).
+ * Glisser à la souris/au doigt, flèches du clavier (une fois sélectionné), double-clic = taille d'origine.
+ * onDrag(position) reçoit la coordonnée du pointeur ; onNudge(±1) un déplacement au clavier.
+ */
+function Splitter({ axis, onDrag, onNudge, onReset, label }) {
   const [dragging, setDragging] = useState(false);
+  const horizontal = axis === 'y'; // ligne horizontale qui sépare haut et bas
 
   function handlePointerDown(event) {
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     setDragging(true);
-    document.body.classList.add(axis === 'x' ? 'resizing-col' : 'resizing-row');
+    document.body.classList.add(horizontal ? 'resizing-row' : 'resizing-col');
   }
   function handlePointerMove(event) {
-    if (dragging) onDrag(axis === 'x' ? event.clientX : event.clientY);
+    if (dragging) onDrag(horizontal ? event.clientY : event.clientX);
   }
   function handlePointerUp() {
     setDragging(false);
     document.body.classList.remove('resizing-col', 'resizing-row');
   }
+  function handleKeyDown(event) {
+    const before = horizontal ? 'ArrowUp' : 'ArrowLeft';
+    const after = horizontal ? 'ArrowDown' : 'ArrowRight';
+    if (event.key === before || event.key === after) {
+      event.preventDefault();
+      onNudge(event.key === before ? -1 : 1);
+    }
+  }
 
   return (
     <div
       role="separator"
-      aria-orientation={axis === 'x' ? 'vertical' : 'horizontal'}
-      className={`splitter ${dragging ? 'dragging' : ''} ${axis === 'x' ? 'w-px cursor-col-resize' : 'h-px cursor-row-resize'}`}
+      tabIndex={0}
+      aria-label={label}
+      aria-orientation={horizontal ? 'horizontal' : 'vertical'}
+      title="Glisser pour redimensionner (double-clic : taille d'origine)"
+      className={`splitter ${dragging ? 'dragging' : ''} ${
+        horizontal ? 'splitter-row h-1.5 cursor-row-resize' : 'splitter-col w-1.5 cursor-col-resize'
+      }`}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onDoubleClick={onReset}
+      onKeyDown={handleKeyDown}
     />
   );
 }
+
+const DEFAULT_SIZES = { sidebar: 340, consoleHeight: 260, consoleWidth: 420 };
 
 export default function App() {
   const [theme, setTheme] = usePersistentState('pystudio.theme', 'dark');
   const [code, setCode] = usePersistentState('pystudio.code', DEFAULT_CODE);
   const [breakpoints, setBreakpoints] = useState([]);
   const [samples, setSamples] = useState([]);
-  const [sidebarWidth, setSidebarWidth] = useState(340);
-  const [consoleHeight, setConsoleHeight] = useState(260);
-  const [consoleWidth, setConsoleWidth] = useState(420);
+  const [sidebarWidth, setSidebarWidth] = usePersistentNumber('pystudio.sidebarWidth', DEFAULT_SIZES.sidebar);
+  const [consoleHeight, setConsoleHeight] = usePersistentNumber('pystudio.consoleHeight', DEFAULT_SIZES.consoleHeight);
+  const [consoleWidth, setConsoleWidth] = usePersistentNumber('pystudio.consoleWidth', DEFAULT_SIZES.consoleWidth);
   const [fileName, setFileName] = useState(null); // fichier ouvert/enregistré (null = sans nom)
   const [savedCode, setSavedCode] = useState(code); // contenu au dernier enregistrement
   const [fileSource, setFileSource] = useState(null); // 'local' | 'onedrive' | null
@@ -238,19 +269,31 @@ export default function App() {
   }, []);
 
   // Redimensionnement
-  const dragSidebar = (clientX) => {
+  // Tailles minimales volontairement petites : on peut presque masquer un panneau.
+  const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
+  const sideBySide = consoleLayout === 'right';
+
+  const resizeSidebar = (width) => {
     const rect = workspaceRef.current.getBoundingClientRect();
-    setSidebarWidth(Math.min(Math.max(rect.right - clientX, 220), rect.width - 320));
+    setSidebarWidth(clamp(width, 120, rect.width - 160));
   };
+  const resizeConsole = (size) => {
+    const rect = columnRef.current.getBoundingClientRect();
+    if (sideBySide) setConsoleWidth(clamp(size, 120, rect.width - 120));
+    else setConsoleHeight(clamp(size, 40, rect.height - 80));
+  };
+
+  const dragSidebar = (clientX) => resizeSidebar(workspaceRef.current.getBoundingClientRect().right - clientX);
   const dragConsole = (position) => {
     const rect = columnRef.current.getBoundingClientRect();
-    if (consoleLayout === 'right') {
-      setConsoleWidth(Math.min(Math.max(rect.right - position, 200), rect.width - 240));
-    } else {
-      setConsoleHeight(Math.min(Math.max(rect.bottom - position, 90), rect.height - 140));
-    }
+    resizeConsole(sideBySide ? rect.right - position : rect.bottom - position);
   };
-  const sideBySide = consoleLayout === 'right';
+  // Clavier : déplacer le séparateur vers le début (-1) ou la fin (+1) ; le panneau suit en sens inverse.
+  const nudgeSidebar = (direction) => resizeSidebar(sidebarWidth - direction * KEY_STEP);
+  const nudgeConsole = (direction) =>
+    resizeConsole((sideBySide ? consoleWidth : consoleHeight) - direction * KEY_STEP);
+  const resetConsole = () =>
+    resizeConsole(sideBySide ? DEFAULT_SIZES.consoleWidth : DEFAULT_SIZES.consoleHeight);
 
   const busy = status === 'running' || status === 'paused';
 
@@ -317,10 +360,16 @@ export default function App() {
             />
           </div>
 
-          <Splitter axis={sideBySide ? 'x' : 'y'} onDrag={dragConsole} />
+          <Splitter
+            axis={sideBySide ? 'x' : 'y'}
+            label="Séparateur entre le code et la console"
+            onDrag={dragConsole}
+            onNudge={nudgeConsole}
+            onReset={resetConsole}
+          />
 
           <section
-            style={sideBySide ? { width: consoleWidth } : { height: consoleHeight }}
+            style={sideBySide ? { width: consoleWidth, maxWidth: '90%' } : { height: consoleHeight, maxHeight: '90%' }}
             className="flex shrink-0 flex-col bg-ide-bg"
           >
             <div className="flex h-8 shrink-0 items-center border-b border-ide-border bg-ide-panel px-3 text-xs font-semibold uppercase tracking-wide text-ide-muted">
@@ -340,10 +389,16 @@ export default function App() {
           </section>
         </div>
 
-        <Splitter axis="x" onDrag={dragSidebar} />
+        <Splitter
+          axis="x"
+          label="Séparateur entre le code et le panneau Variables"
+          onDrag={dragSidebar}
+          onNudge={nudgeSidebar}
+          onReset={() => resizeSidebar(DEFAULT_SIZES.sidebar)}
+        />
 
         {/* Colonne droite : variables */}
-        <aside style={{ width: sidebarWidth }} className="hidden shrink-0 md:block">
+        <aside style={{ width: sidebarWidth, maxWidth: '70%' }} className="hidden shrink-0 overflow-hidden md:block">
           <VariablesPanel snapshot={runner.snapshot} status={status} />
         </aside>
       </div>

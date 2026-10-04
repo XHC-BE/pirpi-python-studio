@@ -71,14 +71,50 @@ body {
   background: var(--ide-border);
   transition: background-color 0.15s;
 }
-.splitter:hover,
-.splitter.dragging {
-  background: var(--ide-accent);
+.splitter {
+  touch-action: none; /* permet le glisser au doigt (Chromebook tactile) */
+  z-index: 5;
 }
+.splitter:hover,
+.splitter.dragging,
+.splitter:focus-visible {
+  background: var(--ide-accent);
+  outline: none;
+}
+/* Zone de saisie élargie autour de la fine barre visible */
 .splitter::after {
   content: '';
   position: absolute;
-  inset: -3px;
+}
+.splitter-col::after {
+  inset: 0 -4px;
+}
+.splitter-row::after {
+  inset: -4px 0;
+}
+/* Petite poignée centrale (trois points) */
+.splitter::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--ide-muted);
+  opacity: 0.7;
+  border-radius: 2px;
+}
+.splitter-col::before {
+  width: 2px;
+  height: 28px;
+}
+.splitter-row::before {
+  width: 28px;
+  height: 2px;
+}
+.splitter:hover::before,
+.splitter.dragging::before {
+  background: #fff;
+  opacity: 1;
 }
 
 /* ---- Variables modifiées (surbrillance qui s'estompe) ---- */

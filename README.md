@@ -18,7 +18,7 @@ Un mini-IDE pour l'enseignement de Python, **100 % côté navigateur** (aucun se
 - **Points d'arrêt** : clic dans la marge à gauche des numéros de ligne. Ils suivent les lignes quand on édite le code et peuvent être ajoutés/retirés **pendant** l'exécution.
 - **Console** : affiche `print()`, les erreurs (en rouge, avec la ligne fautive soulignée dans l'éditeur) et capture `input()` (`Entrée` valide, `Ctrl+D` = fin de fichier, `Ctrl+C` = arrêt).
 - **Variables** : nom, type et valeur des variables locales/globales, **pile d'appels**, rafraîchies en direct pendant l'exécution ; en pause, les variables qui viennent de changer clignotent. L'état final reste visible après la fin du programme.
-- Console placée **sous** le code ou **à sa droite** (bouton dans la barre d'outils, choix mémorisé), séparateurs redimensionnables.
+- Console placée **sous** le code ou **à sa droite** (bouton dans la barre d'outils, choix mémorisé), séparateurs redimensionnables à la souris, au doigt ou au clavier (flèches, après avoir cliqué sur un séparateur) ; double-clic = taille d'origine ; les tailles sont mémorisées.
 - **Ouvrir / Enregistrer / Enregistrer sous** (`Ctrl+O`, `Ctrl+S`, `Ctrl+Maj+S`) : sur Chrome et Edge, ce sont de vraies boîtes de dialogue. Choisissez votre dossier **OneDrive** (celui synchronisé par l'application OneDrive, ex. `C:\Users\vous\OneDrive`) : le fichier est alors dans votre OneDrive, et `Ctrl+S` le met à jour au même endroit. Sur Firefox/Safari, « Ouvrir » envoie un fichier et « Enregistrer » le télécharge.
 - Exemples intégrés, sauvegarde automatique du code (localStorage), thème sombre (par défaut) / clair.
 - Les paquets Pyodide importés (`numpy`, `pandas`…) sont chargés automatiquement au premier `import`.
