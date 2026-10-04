@@ -1,0 +1,8 @@
+[
+  { "title": "Bonjour (input)", "file": "bonjour.py" },
+  { "title": "Boucle et accumulation", "file": "boucle.py" },
+  { "title": "Fonctions (Entrer / Sortir)", "file": "fonction.py" },
+  { "title": "Tri à bulles", "file": "tri.py" },
+  { "title": "Devine le nombre", "file": "devine.py" },
+  { "title": "Une erreur à corriger", "file": "erreur.py" }
+]

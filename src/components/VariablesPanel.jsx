@@ -1,0 +1,108 @@
+const STATUS_HINT = {
+  loading: 'Python est en cours de chargement…',
+  idle: 'Aucune variable. Lancez le programme, ou utilisez « Étape suivante » pour l’exécuter ligne par ligne.',
+  running: 'Le programme démarre…',
+  paused: 'Aucune variable à afficher.',
+  fatal: 'Python est indisponible.',
+};
+
+function VariableRow({ variable, changed }) {
+  return (
+    <tr className={changed ? 'var-changed' : ''}>
+      <td className="whitespace-nowrap py-1 pl-3 pr-2 align-top font-mono text-ide-var">{variable.name}</td>
+      <td className="whitespace-nowrap px-2 py-1 align-top font-mono text-xs text-ide-type">{variable.type}</td>
+      <td className="max-w-0 break-all py-1 pl-2 pr-3 align-top font-mono" title={variable.value}>
+        <span className="line-clamp-3">{variable.value}</span>
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * Panneau « Variables » : pile d'appels + variables locales/globales.
+ * Pendant l'exécution les valeurs se rafraîchissent en direct ; en pause,
+ * les variables modifiées par la dernière instruction sont mises en surbrillance.
+ */
+export default function VariablesPanel({ snapshot, status }) {
+  const scopes = snapshot?.scopes ?? [];
+  const hasVars = scopes.some((scope) => scope.vars.length > 0);
+  const stack = status === 'paused' ? snapshot?.stack ?? [] : [];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-ide-panel">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-ide-border px-3 text-xs font-semibold uppercase tracking-wide text-ide-muted">
+        <span>Variables</span>
+        {snapshot?.final && <span className="rounded bg-ide-hover px-1.5 py-0.5 normal-case">état final</span>}
+        {status === 'running' && !snapshot?.final && (
+          <span className="flex items-center gap-1 normal-case text-ide-run">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ide-run" /> en direct
+          </span>
+        )}
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto text-sm">
+        {stack.length > 0 && (
+          <section className="border-b border-ide-border">
+            <h3 className="px-3 py-1.5 text-xs font-semibold text-ide-muted">Pile d'appels</h3>
+            <ol className="pb-2 font-mono text-xs">
+              {stack.map((frame, index) => (
+                <li
+                  key={index}
+                  className={`flex justify-between gap-2 px-3 py-0.5 ${index === 0 ? 'text-ide-fg' : 'text-ide-muted'}`}
+                >
+                  <span className="truncate">
+                    {index === 0 ? '▶ ' : '  '}
+                    {frame.name}
+                  </span>
+                  <span>ligne {frame.line}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {!hasVars && (
+          <p className="px-4 py-6 text-center text-sm text-ide-muted">
+            {snapshot ? 'Le programme ne définit encore aucune variable.' : STATUS_HINT[status]}
+          </p>
+        )}
+
+        {scopes.map(
+          (scope) =>
+            scope.vars.length > 0 && (
+              <section key={scope.title} className="border-b border-ide-border pb-1">
+                <h3 className="px-3 py-1.5 text-xs font-semibold text-ide-muted">{scope.title}</h3>
+                <table className="w-full table-fixed border-collapse text-sm">
+                  <colgroup>
+                    <col className="w-[28%]" />
+                    <col className="w-[22%]" />
+                    <col />
+                  </colgroup>
+                  <thead>
+                    <tr className="text-left text-xs text-ide-muted">
+                      <th className="py-0.5 pl-3 pr-2 font-normal">Nom</th>
+                      <th className="px-2 py-0.5 font-normal">Type</th>
+                      <th className="py-0.5 pl-2 pr-3 font-normal">Valeur</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scope.vars.map((variable) => {
+                      const changed = snapshot.changed?.has(`${scope.title}\u0000${variable.name}`);
+                      return (
+                        <VariableRow
+                          // La clé change à chaque modification : l'animation de surbrillance se rejoue.
+                          key={changed ? `${variable.name}:${snapshot.sequence}` : variable.name}
+                          variable={variable}
+                          changed={changed}
+                        />
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </section>
+            ),
+        )}
+      </div>
+    </div>
+  );
+}

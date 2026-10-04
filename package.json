@@ -1,0 +1,30 @@
+{
+  "name": "python-studio",
+  "private": true,
+  "version": "1.0.0",
+  "description": "IDE Python pédagogique dans le navigateur : Monaco, Pyodide (Web Worker), débogueur pas à pas, console xterm.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "dev:classe": "vite --host --mode lan",
+    "preview:classe": "vite preview --host --mode lan"
+  },
+  "dependencies": {
+    "@azure/msal-browser": "^4.30.0",
+    "@monaco-editor/react": "^4.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "monaco-editor": "^0.57.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.2"
+  }
+}

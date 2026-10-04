@@ -1,0 +1,160 @@
+@import 'tailwindcss';
+
+/* ---- Thèmes : les couleurs sont des variables CSS, commutées par data-theme ---- */
+:root {
+  --ide-bg: #1e1e1e;
+  --ide-panel: #252526;
+  --ide-hover: #2f3032;
+  --ide-border: #3c3c3c;
+  --ide-fg: #d4d4d4;
+  --ide-muted: #9a9a9a;
+  --ide-accent: #4fc1ff;
+  --ide-run: #4ec9b0;
+  --ide-stop: #f48771;
+  --ide-warn: #ffcc00;
+  --ide-var: #9cdcfe;
+  --ide-type: #4ec9b0;
+  --ide-changed: rgba(255, 204, 0, 0.28);
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --ide-bg: #ffffff;
+  --ide-panel: #f3f3f3;
+  --ide-hover: #e4e6e8;
+  --ide-border: #d4d4d4;
+  --ide-fg: #333333;
+  --ide-muted: #6b6b6b;
+  --ide-accent: #0066b8;
+  --ide-run: #0f8a6b;
+  --ide-stop: #c72e0f;
+  --ide-warn: #b58900;
+  --ide-var: #001080;
+  --ide-type: #267f99;
+  --ide-changed: rgba(255, 204, 0, 0.45);
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-ide-bg: var(--ide-bg);
+  --color-ide-panel: var(--ide-panel);
+  --color-ide-hover: var(--ide-hover);
+  --color-ide-border: var(--ide-border);
+  --color-ide-fg: var(--ide-fg);
+  --color-ide-muted: var(--ide-muted);
+  --color-ide-accent: var(--ide-accent);
+  --color-ide-run: var(--ide-run);
+  --color-ide-stop: var(--ide-stop);
+  --color-ide-warn: var(--ide-warn);
+  --color-ide-var: var(--ide-var);
+  --color-ide-type: var(--ide-type);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--ide-bg);
+  color: var(--ide-fg);
+  font-family: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* ---- Séparateurs redimensionnables ---- */
+.splitter {
+  position: relative;
+  flex: none;
+  background: var(--ide-border);
+  transition: background-color 0.15s;
+}
+.splitter:hover,
+.splitter.dragging {
+  background: var(--ide-accent);
+}
+.splitter::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+
+/* ---- Variables modifiées (surbrillance qui s'estompe) ---- */
+@keyframes var-flash {
+  from {
+    background-color: var(--ide-changed);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.var-changed {
+  animation: var-flash 1.6s ease-out;
+}
+
+/* ---- Décorations Monaco : points d'arrêt, ligne courante, erreur ---- */
+.bp-glyph::before,
+.bp-glyph-hover::before,
+.current-arrow::before,
+.error-glyph::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+.bp-glyph::before {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #e51400;
+}
+.bp-glyph-hover::before {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(229, 20, 0, 0.35);
+}
+.bp-line {
+  background: rgba(229, 20, 0, 0.1);
+}
+.exec-line {
+  background: rgba(255, 204, 0, 0.22);
+  outline: 1px solid rgba(255, 204, 0, 0.55);
+  outline-offset: -1px;
+}
+.current-arrow::before {
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-left: 10px solid #ffcc00;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+  z-index: 2;
+}
+.run-error-line {
+  background: rgba(229, 20, 0, 0.18);
+}
+.error-glyph::before {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid #f14c4c;
+}
+
+/* Curseur « redimensionnement » pendant un glisser */
+body.resizing-col {
+  cursor: col-resize;
+  user-select: none;
+}
+body.resizing-row {
+  cursor: row-resize;
+  user-select: none;
+}
+
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+}
