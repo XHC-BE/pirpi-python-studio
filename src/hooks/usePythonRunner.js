@@ -38,6 +38,7 @@ export function usePythonRunner({ terminalRef, breakpoints }) {
   const breakpointsRef = useRef(breakpoints);
   const lastSnapshotRef = useRef(null);
   const sequenceRef = useRef(0);
+  const pauseRef = useRef(0);
 
   const changeStatus = useCallback((next) => {
     statusRef.current = next;
@@ -47,7 +48,7 @@ export function usePythonRunner({ terminalRef, breakpoints }) {
   const term = () => terminalRef.current;
 
   /** Enregistre un instantané ; calcule les variables modifiées si on est en pause. */
-  const applySnapshot = useCallback((raw, { highlight }) => {
+  const applySnapshot = useCallback((raw, { highlight, edit = false }) => {
     const data = JSON.parse(raw);
     const previous = new Map();
     for (const scope of lastSnapshotRef.current?.scopes ?? []) {
@@ -64,7 +65,8 @@ export function usePythonRunner({ terminalRef, breakpoints }) {
     }
     lastSnapshotRef.current = data;
     sequenceRef.current += 1;
-    setSnapshot({ ...data, changed, sequence: sequenceRef.current });
+    if (!edit) pauseRef.current += 1; // une modification de variable ne change pas l'arrêt en cours
+    setSnapshot({ ...data, changed, sequence: sequenceRef.current, pause: pauseRef.current });
   }, []);
 
   const handleMessage = useCallback(
@@ -88,7 +90,7 @@ export function usePythonRunner({ terminalRef, breakpoints }) {
           break;
 
         case 'paused': {
-          applySnapshot(message.data, { highlight: true });
+          applySnapshot(message.data, { highlight: true, edit: message.edit });
           const line = JSON.parse(message.data).line;
           setCurrentLine(line);
           changeStatus('paused');
@@ -256,6 +258,21 @@ export function usePythonRunner({ terminalRef, breakpoints }) {
     sendSignal(views, CMD.INPUT);
   }, []);
 
+  /**
+   * Modifie une variable pendant une pause.
+   * @param {{frame: number, scope: 'local'|'global', name: string, expr: string}} edit
+   *   frame = index dans la pile d'appels affichée (0 = appel courant) ; expr = expression Python.
+   */
+  const editVariable = useCallback((edit) => {
+    if (statusRef.current !== 'paused') return;
+    const views = viewsRef.current;
+    const bytes = new TextEncoder().encode(JSON.stringify(edit));
+    if (bytes.length > INPUT_CAPACITY) return;
+    views.input.set(bytes);
+    Atomics.store(views.control, CTRL.INPUT_LEN, bytes.length);
+    sendSignal(views, CMD.EDIT);
+  }, []);
+
   const clearError = useCallback(() => setErrorInfo(null), []);
 
   return {
@@ -272,6 +289,7 @@ export function usePythonRunner({ terminalRef, breakpoints }) {
     continueRun,
     stop,
     submitInput,
+    editVariable,
     clearError,
   };
 }

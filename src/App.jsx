@@ -399,7 +399,7 @@ export default function App() {
 
         {/* Colonne droite : variables */}
         <aside style={{ width: sidebarWidth, maxWidth: '70%' }} className="hidden shrink-0 overflow-hidden md:block">
-          <VariablesPanel snapshot={runner.snapshot} status={status} />
+          <VariablesPanel snapshot={runner.snapshot} status={status} onEditVariable={runner.editVariable} />
         </aside>
       </div>
     </div>

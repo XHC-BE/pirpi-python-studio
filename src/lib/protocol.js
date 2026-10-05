@@ -22,6 +22,7 @@ export const CMD = Object.freeze({
   STOP: 5,
   INPUT: 6, // une ligne a été saisie (texte dans la zone d'entrée)
   EOF: 7, // Ctrl+D dans la console
+  EDIT: 8, // modification d'une variable en pause (JSON dans la zone d'entrée)
 });
 
 /** Index des mots Int32 de contrôle. */

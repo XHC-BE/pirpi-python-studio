@@ -21,6 +21,7 @@ FILENAME = "<programme>"
 
 # Commandes reçues de l'interface — identiques à CMD dans src/lib/protocol.js
 CMD_CONTINUE, CMD_OVER, CMD_INTO, CMD_OUT, CMD_STOP = 1, 2, 3, 4, 5
+CMD_EDIT = 8
 
 STREAM_OUT, STREAM_ERR = 0, 1
 
@@ -114,7 +115,7 @@ def _describe_stack(frame):
     return stack, omitted
 
 
-def _snapshot_json(frame, line, final=False, namespace=None):
+def _snapshot_json(frame, line, final=False, namespace=None, edit_error=None):
     scopes = []
     stack = []
     omitted = 0
@@ -132,8 +133,72 @@ def _snapshot_json(frame, line, final=False, namespace=None):
     elif namespace is not None:
         scopes.append({"title": "Variables globales", "vars": _collect(namespace)})
     return json.dumps(
-        {"scopes": scopes, "stack": stack, "stackOmitted": omitted, "line": line, "final": final}, default=str
+        {
+            "scopes": scopes,
+            "stack": stack,
+            "stackOmitted": omitted,
+            "line": line,
+            "final": final,
+            "editError": edit_error,
+        },
+        default=str,
     )
+
+
+# --------------------------------------------------------------------------
+# Modification d'une variable pendant une pause
+# --------------------------------------------------------------------------
+
+
+def _locals_to_fast(frame):
+    """Python ≤ 3.12 : `frame.f_locals` d'une fonction est une copie ; on la réinjecte
+    dans la frame. Python ≥ 3.13 : f_locals écrit directement, rien à faire."""
+    if sys.version_info >= (3, 13):
+        return
+    try:
+        import ctypes
+
+        ctypes.pythonapi.PyFrame_LocalsToFast(ctypes.py_object(frame), ctypes.c_int(0))
+    except Exception as exc:
+        raise RuntimeError(
+            "Impossible de modifier une variable locale dans cet environnement "
+            f"({type(exc).__name__}). Les variables globales restent modifiables."
+        ) from exc
+
+
+def _apply_edit(frame, payload):
+    """Évalue l'expression saisie et l'affecte à la variable. Renvoie None ou un message d'erreur."""
+    try:
+        request = json.loads(payload)
+        target = frame
+        for _ in range(int(request["frame"])):  # frames du programme uniquement, comme la pile affichée
+            target = target.f_back
+            while target is not None and target.f_code.co_filename != FILENAME:
+                target = target.f_back
+        if target is None:
+            raise ValueError("Cet appel n'existe plus.")
+
+        name = request["name"]
+        if not isinstance(name, str) or not name.isidentifier():
+            raise ValueError("Nom de variable invalide.")
+        local_ns, global_ns = target.f_locals, target.f_globals
+        is_global = request["scope"] == "global" or local_ns is global_ns
+
+        code = compile(request["expr"].strip(), "<modification>", "eval")
+        value = eval(code, global_ns, dict(local_ns))
+
+        if is_global:
+            global_ns[name] = value
+        else:
+            if name not in local_ns:
+                raise ValueError(f"« {name} » n'est pas une variable locale de cet appel.")
+            local_ns[name] = value
+            _locals_to_fast(target)
+        return None
+    except SyntaxError as exc:
+        return f"Expression invalide : {exc.msg}"
+    except Exception as exc:
+        return f"{type(exc).__name__}: {exc}"
 
 
 # --------------------------------------------------------------------------
@@ -207,6 +272,9 @@ class Tracer:
     def _pause(self, frame):
         # Bloque le worker (Atomics.wait) jusqu'à la commande de l'utilisateur.
         command = bridge.pause(_snapshot_json(frame, frame.f_lineno))
+        while command == CMD_EDIT:  # l'utilisateur modifie une variable : on reste en pause
+            error = _apply_edit(frame, bridge.read_edit())
+            command = bridge.pause(_snapshot_json(frame, frame.f_lineno, edit_error=error), True)
         self.breakpoints = self._read_breakpoints()
         self.last_housekeeping = self.last_snapshot = _monotonic()
 

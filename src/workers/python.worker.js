@@ -75,6 +75,12 @@ function waitForSignal() {
   }
 }
 
+function readInputText() {
+  const length = Atomics.load(views.control, CTRL.INPUT_LEN);
+  // .slice() copie hors du SharedArrayBuffer : TextDecoder refuse les vues partagées.
+  return new TextDecoder().decode(views.input.slice(0, length));
+}
+
 // ---------------------------------------------------------------------------
 // Module JavaScript exposé à Python sous le nom « studio_bridge »
 // ---------------------------------------------------------------------------
@@ -90,12 +96,15 @@ const bridge = {
   snapshot: (json) => post({ type: 'snapshot', data: json }),
 
   /** Pause (point d'arrêt / pas à pas) : bloque jusqu'à la commande de l'utilisateur. */
-  pause: (json) => {
+  pause: (json, edit = false) => {
     flushOutput();
     Atomics.store(views.control, CTRL.SIGNAL, 0);
-    post({ type: 'paused', data: json });
+    post({ type: 'paused', data: json, edit });
     return waitForSignal();
   },
+
+  /** Texte déposé par l'interface dans la zone d'entrée (saisie input() ou modification de variable). */
+  read_edit: () => readInputText(),
 
   /** input() : renvoie "L<texte>", "E" (fin de fichier) ou "S" (arrêt demandé). */
   read_line: () => {
@@ -103,12 +112,7 @@ const bridge = {
     Atomics.store(views.control, CTRL.SIGNAL, 0);
     post({ type: 'input-request' });
     const command = waitForSignal();
-    if (command === CMD.INPUT) {
-      const length = Atomics.load(views.control, CTRL.INPUT_LEN);
-      // .slice() copie hors du SharedArrayBuffer : TextDecoder refuse les vues partagées.
-      const bytes = views.input.slice(0, length);
-      return 'L' + new TextDecoder().decode(bytes);
-    }
+    if (command === CMD.INPUT) return 'L' + readInputText();
     return command === CMD.EOF ? 'E' : 'S';
   },
 };

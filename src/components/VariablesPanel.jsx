@@ -8,13 +8,46 @@ const STATUS_HINT = {
   fatal: 'Python est indisponible.',
 };
 
-function VariableRow({ variable, changed }) {
+function VariableRow({ variable, changed, onCommit }) {
+  const [draft, setDraft] = useState(null); // null = pas en cours d'édition
+  // Fonctions, classes et objets (« <… object at …> ») ne s'écrivent pas comme une expression.
+  const editable = onCommit && !variable.value.startsWith('<');
+
+  const commit = () => {
+    const expr = draft.trim();
+    setDraft(null);
+    if (expr !== '' && expr !== variable.value) onCommit(variable.name, expr);
+  };
+
   return (
     <tr className={changed ? 'var-changed' : ''}>
       <td className="whitespace-nowrap py-1 pl-3 pr-2 align-top font-mono text-ide-var">{variable.name}</td>
       <td className="whitespace-nowrap px-2 py-1 align-top font-mono text-xs text-ide-type">{variable.type}</td>
-      <td className="max-w-0 break-all py-1 pl-2 pr-3 align-top font-mono" title={variable.value}>
-        <span className="line-clamp-3">{variable.value}</span>
+      <td
+        className="max-w-0 break-all py-1 pl-2 pr-3 align-top font-mono"
+        title={editable ? `${variable.value}\n(double-clic pour modifier)` : variable.value}
+        onDoubleClick={editable ? () => setDraft(variable.value) : undefined}
+      >
+        {draft === null ? (
+          <span className="line-clamp-3">{variable.value}</span>
+        ) : (
+          <input
+            autoFocus
+            value={draft}
+            maxLength={2000}
+            spellCheck={false}
+            aria-label={`Nouvelle valeur de ${variable.name}`}
+            onChange={(event) => setDraft(event.target.value)}
+            onFocus={(event) => event.target.select()}
+            onBlur={() => setDraft(null)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commit();
+              else if (event.key === 'Escape') setDraft(null);
+              event.stopPropagation(); // pas de raccourcis de l'éditeur pendant la saisie
+            }}
+            className="w-full rounded border border-ide-border bg-ide-hover px-1 py-0.5 font-mono text-ide-fg outline-none focus:border-ide-var"
+          />
+        )}
       </td>
     </tr>
   );
@@ -25,11 +58,13 @@ function VariableRow({ variable, changed }) {
  * Pendant l'exécution les valeurs se rafraîchissent en direct ; en pause,
  * les variables modifiées par la dernière instruction sont mises en surbrillance.
  */
-export default function VariablesPanel({ snapshot, status }) {
+export default function VariablesPanel({ snapshot, status, onEditVariable }) {
   const stack = status === 'paused' ? snapshot?.stack ?? [] : [];
-  // Frame sélectionnée dans la pile ; revient à la frame courante à chaque nouvel arrêt.
-  const [selection, setSelection] = useState({ sequence: null, index: 0 });
-  const selected = selection.sequence === snapshot?.sequence && selection.index < stack.length ? selection.index : 0;
+  const canEdit = status === 'paused' && !snapshot?.final && Boolean(onEditVariable);
+  // Frame sélectionnée dans la pile ; revient à la frame courante à chaque nouvel arrêt
+  // (pas après une modification de variable : `pause` ne change pas).
+  const [selection, setSelection] = useState({ pause: null, index: 0 });
+  const selected = selection.pause === snapshot?.pause && selection.index < stack.length ? selection.index : 0;
 
   let scopes = snapshot?.scopes ?? [];
   if (selected > 0) {
@@ -55,6 +90,11 @@ export default function VariablesPanel({ snapshot, status }) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto text-sm">
+        {snapshot?.editError && status === 'paused' && (
+          <p role="alert" className="border-b border-ide-border px-3 py-1.5 font-mono text-xs text-red-400">
+            Modification refusée — {snapshot.editError}
+          </p>
+        )}
         {stack.length > 0 && (
           <section className="border-b border-ide-border">
             <h3 className="px-3 py-1.5 text-xs font-semibold text-ide-muted">Pile d'appels</h3>
@@ -66,7 +106,7 @@ export default function VariablesPanel({ snapshot, status }) {
                   <li key={index}>
                     <button
                       type="button"
-                      onClick={() => setSelection({ sequence: snapshot.sequence, index })}
+                      onClick={() => setSelection({ pause: snapshot.pause, index })}
                       aria-current={index === selected}
                       title={`${label}\nligne ${frame.line}`}
                       className={`block w-full px-3 py-1 text-left hover:bg-ide-hover ${
@@ -125,6 +165,17 @@ export default function VariablesPanel({ snapshot, status }) {
                           key={changed ? `${variable.name}:${snapshot.sequence}` : variable.name}
                           variable={variable}
                           changed={changed}
+                          onCommit={
+                            canEdit
+                              ? (name, expr) =>
+                                  onEditVariable({
+                                    frame: selected,
+                                    scope: scope.title === 'Variables globales' ? 'global' : 'local',
+                                    name,
+                                    expr,
+                                  })
+                              : undefined
+                          }
                         />
                       );
                     })}
