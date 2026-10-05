@@ -69,9 +69,55 @@ def _collect(namespace):
     return items
 
 
+MAX_STACK_FRAMES = 100  # une récursion profonde ne doit pas gonfler les messages
+
+
+def _frame_args(frame):
+    """Arguments de la fonction (valeurs actuelles), dans l'ordre de la signature."""
+    code = frame.f_code
+    count = code.co_argcount + code.co_kwonlyargcount
+    if code.co_flags & 0x04:  # *args
+        count += 1
+    if code.co_flags & 0x08:  # **kwargs
+        count += 1
+    local_ns = frame.f_locals
+    return [
+        {"name": name, "value": _describe(local_ns[name])}
+        for name in code.co_varnames[:count]
+        if name in local_ns
+    ]
+
+
+def _describe_stack(frame):
+    """Pile d'appels du programme de l'étudiant, de la frame courante au programme principal.
+    Les variables locales sont jointes aux frames appelantes (la frame courante est
+    déjà décrite par les « scopes » de l'instantané)."""
+    stack, omitted = [], 0
+    current = frame
+    while current is not None:
+        if current.f_code.co_filename == FILENAME:
+            if len(stack) >= MAX_STACK_FRAMES:
+                omitted += 1
+            else:
+                name = current.f_code.co_name
+                is_module = name == "<module>"
+                entry = {
+                    "name": "programme principal" if is_module else f"{name}()",
+                    "line": current.f_lineno,
+                    "source": linecache.getline(FILENAME, current.f_lineno).strip(),
+                    "args": [] if is_module else _frame_args(current),
+                }
+                if stack and not is_module:
+                    entry["vars"] = _collect(current.f_locals)
+                stack.append(entry)
+        current = current.f_back
+    return stack, omitted
+
+
 def _snapshot_json(frame, line, final=False, namespace=None):
     scopes = []
     stack = []
+    omitted = 0
     if frame is not None:
         local_ns, global_ns = frame.f_locals, frame.f_globals
         if local_ns is global_ns:
@@ -81,17 +127,13 @@ def _snapshot_json(frame, line, final=False, namespace=None):
                 {"title": f"Variables locales · {frame.f_code.co_name}()", "vars": _collect(local_ns)}
             )
             scopes.append({"title": "Variables globales", "vars": _collect(global_ns)})
-        current = frame
-        while current is not None:
-            if current.f_code.co_filename == FILENAME:
-                name = current.f_code.co_name
-                stack.append(
-                    {"name": "programme principal" if name == "<module>" else f"{name}()", "line": current.f_lineno}
-                )
-            current = current.f_back
+        if line is not None:  # pile détaillée uniquement en pause (pas pour les instantanés « en direct »)
+            stack, omitted = _describe_stack(frame)
     elif namespace is not None:
         scopes.append({"title": "Variables globales", "vars": _collect(namespace)})
-    return json.dumps({"scopes": scopes, "stack": stack, "line": line, "final": final}, default=str)
+    return json.dumps(
+        {"scopes": scopes, "stack": stack, "stackOmitted": omitted, "line": line, "final": final}, default=str
+    )
 
 
 # --------------------------------------------------------------------------

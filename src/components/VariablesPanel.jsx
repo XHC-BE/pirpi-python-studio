@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 const STATUS_HINT = {
   loading: 'Python est en cours de chargement…',
   idle: 'Aucune variable. Lancez le programme, ou utilisez « Étape suivante » pour l’exécuter ligne par ligne.',
@@ -24,9 +26,21 @@ function VariableRow({ variable, changed }) {
  * les variables modifiées par la dernière instruction sont mises en surbrillance.
  */
 export default function VariablesPanel({ snapshot, status }) {
-  const scopes = snapshot?.scopes ?? [];
-  const hasVars = scopes.some((scope) => scope.vars.length > 0);
   const stack = status === 'paused' ? snapshot?.stack ?? [] : [];
+  // Frame sélectionnée dans la pile ; revient à la frame courante à chaque nouvel arrêt.
+  const [selection, setSelection] = useState({ sequence: null, index: 0 });
+  const selected = selection.sequence === snapshot?.sequence && selection.index < stack.length ? selection.index : 0;
+
+  let scopes = snapshot?.scopes ?? [];
+  if (selected > 0) {
+    const frame = stack[selected];
+    const globals = scopes.find((scope) => scope.title === 'Variables globales');
+    scopes = [
+      ...(frame.vars ? [{ title: `Variables locales · ${frame.name}`, vars: frame.vars }] : []),
+      ...(globals ? [globals] : []),
+    ];
+  }
+  const hasVars = scopes.some((scope) => scope.vars.length > 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-ide-panel">
@@ -45,18 +59,35 @@ export default function VariablesPanel({ snapshot, status }) {
           <section className="border-b border-ide-border">
             <h3 className="px-3 py-1.5 text-xs font-semibold text-ide-muted">Pile d'appels</h3>
             <ol className="pb-2 font-mono text-xs">
-              {stack.map((frame, index) => (
-                <li
-                  key={index}
-                  className={`flex justify-between gap-2 px-3 py-0.5 ${index === 0 ? 'text-ide-fg' : 'text-ide-muted'}`}
-                >
-                  <span className="truncate">
-                    {index === 0 ? '▶ ' : '  '}
-                    {frame.name}
-                  </span>
-                  <span>ligne {frame.line}</span>
-                </li>
-              ))}
+              {stack.map((frame, index) => {
+                const args = frame.args?.map((arg) => `${arg.name}=${arg.value}`).join(', ');
+                const label = args !== undefined && frame.name.endsWith('()') ? `${frame.name.slice(0, -2)}(${args})` : frame.name;
+                return (
+                  <li key={index}>
+                    <button
+                      type="button"
+                      onClick={() => setSelection({ sequence: snapshot.sequence, index })}
+                      aria-current={index === selected}
+                      title={`${label}\nligne ${frame.line}`}
+                      className={`block w-full px-3 py-1 text-left hover:bg-ide-hover ${
+                        index === selected ? 'bg-ide-hover text-ide-fg' : 'text-ide-muted'
+                      }`}
+                    >
+                      <span className="flex justify-between gap-2">
+                        <span className="truncate">
+                          {index === 0 ? '▶ ' : '  '}
+                          {label}
+                        </span>
+                        <span className="shrink-0">ligne {frame.line}</span>
+                      </span>
+                      {frame.source && <span className="block truncate pl-4 text-ide-type">{frame.source}</span>}
+                    </button>
+                  </li>
+                );
+              })}
+              {snapshot.stackOmitted > 0 && (
+                <li className="px-3 py-0.5 text-ide-muted">… {snapshot.stackOmitted} appels plus anciens non affichés</li>
+              )}
             </ol>
           </section>
         )}
@@ -87,7 +118,7 @@ export default function VariablesPanel({ snapshot, status }) {
                   </thead>
                   <tbody>
                     {scope.vars.map((variable) => {
-                      const changed = snapshot.changed?.has(`${scope.title}\u0000${variable.name}`);
+                      const changed = selected === 0 && snapshot.changed?.has(`${scope.title}\u0000${variable.name}`);
                       return (
                         <VariableRow
                           // La clé change à chaque modification : l'animation de surbrillance se rejoue.

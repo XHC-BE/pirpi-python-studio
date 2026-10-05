@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Test pygame dans un worker Pyodide</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #1e1e1e; color: #ddd; margin: 16px; }
+    canvas { background: #000; border: 1px solid #555; display: block; margin: 8px 0; }
+    button { padding: 6px 14px; margin-right: 8px; }
+    pre { background: #111; padding: 8px; height: 220px; overflow: auto; }
+    textarea { width: 100%; height: 190px; background: #111; color: #ddd; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <h3>Test pygame-ce dans un Web Worker (pilote vidéo « dummy » + envoi des images)</h3>
+  <div>crossOriginIsolated : <b id="iso"></b></div>
+  <canvas id="c" width="400" height="300"></canvas>
+  <button id="run" disabled>Lancer</button>
+  <button id="stop" disabled>Arrêter</button>
+  <span id="fps"></span>
+  <textarea id="code" spellcheck="false">import pygame, math
+pygame.init()
+screen = pygame.display.set_mode((400, 300))
+clock = pygame.time.Clock()
+
+for frame in range(180):
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            raise SystemExit
+    screen.fill((20, 24, 38))
+    cx = int(200 + 120 * math.cos(frame / 20))
+    cy = int(150 + 80 * math.sin(frame / 20))
+    pygame.draw.circle(screen, (255, 200, 0), (cx, cy), 20)
+    pygame.draw.rect(screen, (0, 160, 255), (10, 10, 60, 30))
+    pygame.display.flip()
+    clock.tick(60)
+pygame.quit()
+</textarea>
+  <pre id="log"></pre>
+  <script type="module">
+    const $ = (id) => document.getElementById(id);
+    const log = (t) => { $('log').textContent += t + '\n'; };
+    $('iso').textContent = String(crossOriginIsolated);
+    const ctx = $('c').getContext('2d');
+    const interruptBuffer = new SharedArrayBuffer(1);
+    const worker = new Worker('./worker.js', { type: 'module' });
+    window.__frames = 0; window.__lastPixel = null; window.__done = false; window.__ready = false;
+
+    worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'log') log(m.text);
+      else if (m.type === 'ready') { window.__ready = true; $('run').disabled = false; log('Prêt.'); }
+      else if (m.type === 'frame') {
+        const img = new ImageData(new Uint8ClampedArray(m.buffer), m.w, m.h);
+        ctx.putImageData(img, 0, 0);
+        window.__frames = m.n;
+        if (m.n % 30 === 0) $('fps').textContent = ` image ${m.n} — ${(m.n / (m.t / 1000)).toFixed(1)} i/s`;
+      }
+      else if (m.type === 'done') {
+        window.__done = true; $('run').disabled = false; $('stop').disabled = true;
+        // vérification automatique : le rectangle bleu (10..70, 10..40) est-il bien dessiné ?
+        const p = ctx.getImageData(40, 25, 1, 1).data;
+        window.__lastPixel = Array.from(p);
+        log('Pixel (40,25) = ' + window.__lastPixel.join(','));
+      }
+      else if (m.type === 'fatal') log('FATAL ' + m.message);
+    };
+    worker.postMessage({ type: 'init', interruptBuffer });
+
+    $('run').onclick = () => {
+      window.__done = false; $('run').disabled = true; $('stop').disabled = false;
+      worker.postMessage({ type: 'run', code: $('code').value });
+    };
+    $('stop').onclick = () => { new Uint8Array(interruptBuffer)[0] = 2; };
+  </script>
+</body>
+</html>
