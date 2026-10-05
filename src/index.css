@@ -118,16 +118,22 @@ body {
 }
 
 /* ---- Variables modifiées (surbrillance qui s'estompe) ---- */
+/* Variable modifiée par la dernière instruction (ou par l'utilisateur) : flash, puis
+   fond discret + barre latérale qui restent tant que l'arrêt en cours dure. */
 @keyframes var-flash {
   from {
-    background-color: var(--ide-changed);
+    background-color: var(--ide-warn);
   }
   to {
-    background-color: transparent;
+    background-color: var(--ide-changed);
   }
 }
 .var-changed {
-  animation: var-flash 1.6s ease-out;
+  background-color: var(--ide-changed);
+  animation: var-flash 1.2s ease-out;
+}
+.var-changed > td:first-child {
+  box-shadow: inset 3px 0 0 var(--ide-warn);
 }
 
 /* ---- Décorations Monaco : points d'arrêt, ligne courante, erreur ---- */
